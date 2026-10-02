@@ -187,6 +187,7 @@ gunzip -c bio244dxy/mafs/blue_PH.mafs.gz > bio244dxy/mafs/blue_PH.mafs
 gunzip -c bio244dxy/mafs/green_PH.mafs.gz > bio244dxy/mafs/green_PH.mafs
 
 # Download getDxy.pl if not present
+mkdir -p bio244dxy/scripts
 if [ ! -f bio244dxy/scripts/getDxy.pl ]; then
   wget -O bio244dxy/scripts/getDxy.pl 'https://raw.githubusercontent.com/mfumagalli/ngsPopGen/master/scripts/getDxy.pl'
 fi
