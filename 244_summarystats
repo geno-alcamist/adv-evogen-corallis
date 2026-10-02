@@ -1,0 +1,271 @@
+# access bio244 VM
+ssh -i ~/bio244miguel bio244@10.206.152.11
+
+
+# drive directory in Ubuntu:
+/mnt/d/bamFiles
+/mnt/c/Users/user/Downloads/drive-download-20260928T071508Z-1-001
+
+# directory in VM:
+bio244@10.206.152.11:/home/bio244/bio244miguel/bio244data/bamfiles
+
+
+# use this to upload, can continue progress
+rsync -a --progress --partial --inplace \
+  -e "ssh -i ~/privatekey -c aes128-gcm@openssh.com" \
+  /file/path/to/origin/ \
+  bio244@10.206.152.11:/file/path/to/destination/
+
+#BIO 244 Activity: Summary Statistics
+
+# bamlist generation
+
+while read sample; do
+  echo "/home/bio244/bio244miguel/bio244data/bamfiles/blue_PH/${sample}.sorted.bam"
+done < blue_ESSL.pop > bamlists/blue_PH.bamlist
+
+while read sample; do
+  echo "/home/bio244/bio244miguel/bio244data/bamfiles/green_PH/${sample}.sorted.bam"
+done < green_ESSL.pop > bamlists/green_PH.bamlist
+
+# defining genomic regions
+awk '{print $1":"$2"-"$3}' scaffolds_1.bed > scaffolds_1.regions
+
+# export angsd; required before running angsd commands 
+cd ~/bio244miguel/angsd
+conda deactivate || true
+export PATH="/home/bio244/bio244miguel/angsd:$PATH"
+which angsd
+
+# Return to working data directory
+cd /home/bio244/bio244miguel/bio244data
+
+# calculating SAF
+angsd \
+    -bam /home/bio244/bio244miguel/bio244data/bamlists/blue_PH.bamlist \
+    -ref /home/bio244/bio244miguel/bio244data/correctly_tagged_combined.fna \
+    -anc /home/bio244/bio244miguel/bio244data/correctly_tagged_combined.fna \
+    -rf /home/bio244/bio244miguel/bio244data/scaffolds_1.regions \
+    -GL 1 \
+    -doSaf 1 \
+    -minMapQ 30 \
+    -minQ 20 \
+    -minInd 10 \
+    -baq 1 \
+    -C 50 \
+    -P 8 \
+    -out /home/bio244/bio244miguel/bio244data/bio244saf/blue_PH
+
+angsd \
+    -bam /home/bio244/bio244miguel/bio244data/bamlists/green_PH.bamlist \
+    -ref /home/bio244/bio244miguel/bio244data/correctly_tagged_combined.fna \
+    -anc /home/bio244/bio244miguel/bio244data/correctly_tagged_combined.fna \
+    -rf /home/bio244/bio244miguel/bio244data/scaffolds_1.regions \
+    -GL 1 \
+    -doSaf 1 \
+    -minMapQ 30 \
+    -minQ 20 \
+    -minInd 10 \
+    -baq 1 \
+    -C 50 \
+    -P 8 \
+    -out /home/bio244/bio244miguel/bio244data/bio244saf/green_PH
+
+# export realsfs and thetastat
+export PATH="/home/bio244/bio244miguel/angsd:/home/bio244/bio244miguel/angsd/misc:$PATH"
+
+# Calculate Folded 1D SFS
+realSFS bio244saf/blue_PH.saf.idx \
+  -fold 1 \
+  -cores 8 \
+  > bio244theta/blue_PH.sfs
+
+realSFS bio244saf/green_PH.saf.idx \
+  -fold 1 \
+  -cores 8 \
+  > bio244theta/green_PH.sfs
+
+# Convert SAF to Theta (For Pi)
+realSFS saf2theta bio244saf/blue_PH.saf.idx \
+  -sfs bio244theta/blue_PH.sfs \
+  -outname bio244theta/blue_PH
+
+realSFS saf2theta bio244saf/green_PH.saf.idx \
+  -sfs bio244theta/green_PH.sfs \
+  -outname bio244theta/green_PH
+
+# Calculate Windowed Nucleotide Diversity (π)
+# 6.1 Run thetaStat (5-kb non-overlapping windows)
+thetaStat do_stat bio244theta/blue_PH.thetas.idx \
+  -win 5000 \
+  -step 5000 \
+  -outnames bio244theta/blue_PH
+
+thetaStat do_stat bio244theta/green_PH.thetas.idx \
+  -win 5000 \
+  -step 5000 \
+  -outnames bio244theta/green_PH
+
+# 6.2 Extract clean TSV tables
+awk 'BEGIN{OFS="\t"} NR>1 {
+  match($1, /\(([0-9]+),([0-9]+)\)$/, a)
+  print $2, a[1], a[2], $3, $5, $14
+}' bio244theta/blue_PH.pestPG > bio244theta/blue_PH_pi_5kb.tsv
+
+awk 'BEGIN{OFS="\t"} NR>1 {
+  match($1, /\(([0-9]+),([0-9]+)\)$/, a)
+  print $2, a[1], a[2], $3, $5, $14
+}' bio244theta/green_PH.pestPG > bio244theta/green_PH_pi_5kb.tsv
+
+# Check window counts
+wc -l bio244theta/blue_PH_pi_5kb.tsv
+wc -l bio244theta/green_PH_pi_5kb.tsv
+
+# Calculate Windowed FST
+# 7.1 Generate joint 2D SFS
+realSFS bio244saf/blue_PH.saf.idx bio244saf/green_PH.saf.idx \
+  -fold 1 \
+  -P 8 \
+  > bio244fst/blue_green.2dsfs
+
+# 7.2 Calculate FST index
+realSFS fst index \
+  bio244saf/blue_PH.saf.idx \
+  bio244saf/green_PH.saf.idx \
+  -sfs bio244fst/blue_green.2dsfs \
+  -whichFst 1 \
+  -fstout bio244fst/blue_green
+
+# 7.3 Calculate 5-kb windowed FST
+realSFS fst stats2 bio244fst/blue_green.fst.idx \
+  -win 5000 \
+  -step 5000 \
+  > bio244fst/blue_green_5kb.fst
+
+# 7.4 Extract clean FST table
+awk 'BEGIN{OFS="\t"} NR>1 {
+  match($1, /\(([0-9]+),([0-9]+)\)$/, a)
+  print $2, a[1], a[2], $3, $5, $4
+}' bio244fst/blue_green_5kb.fst > bio244fst/blue_green_FST_5kb.tsv
+
+# Calculate Dxy
+# 8.1 Generate MAF files for Dxy
+angsd \
+  -bam bamlists/blue_PH.bamlist \
+  -ref correctly_tagged_combined.fna \
+  -anc correctly_tagged_combined.fna \
+  -rf scaffolds_1.regions \
+  -GL 1 \
+  -doMaf 1 \
+  -doMajorMinor 1 \
+  -minMapQ 30 \
+  -minQ 20 \
+  -minInd 10 \
+  -baq 1 \
+  -C 50 \
+  -P 8 \
+  -out bio244dxy/mafs/blue_PH
+
+angsd \
+  -bam bamlists/green_PH.bamlist \
+  -ref correctly_tagged_combined.fna \
+  -anc correctly_tagged_combined.fna \
+  -rf scaffolds_1.regions \
+  -GL 1 \
+  -doMaf 1 \
+  -doMajorMinor 1 \
+  -minMapQ 30 \
+  -minQ 20 \
+  -minInd 10 \
+  -baq 1 \
+  -C 50 \
+  -P 8 \
+  -out bio244dxy/mafs/green_PH
+
+# 8.2 Decompress MAF files
+gunzip -c bio244dxy/mafs/blue_PH.mafs.gz > bio244dxy/mafs/blue_PH.mafs
+gunzip -c bio244dxy/mafs/green_PH.mafs.gz > bio244dxy/mafs/green_PH.mafs
+
+# 8.3 Calculate per-site Dxy using calcDxy.R
+Rscript bio244dxy/scripts/calcDxy.R \
+  -p bio244dxy/mafs/blue_PH.mafs \
+  -q bio244dxy/mafs/green_PH.mafs \
+  > bio244dxy/Dxy_persite.txt
+
+# 8.4 Summarize per-site Dxy into 5-kb windows
+awk 'BEGIN{OFS="\t"} NR>1 {
+  win=int($2/5000)
+  key=$1 OFS win
+  sum[key]+=$3
+  n[key]++
+}
+END {
+  for (key in sum) {
+    split(key,a,OFS)
+    start=a[2]*5000
+    stop=(a[2]+1)*5000
+    center=start+2500
+    print a[1], start, stop, center, sum[key]/n[key], n[key]
+  }
+}' bio244dxy/Dxy_persite.txt | LC_ALL=C sort -k1,1 -k2,2n > bio244dxy/blue_green_Dxy_5kb.tsv
+
+# Add header
+sed -i '1i Chr\tWinStart\tWinStop\tWinCenter\tDxy\tNsites' bio244dxy/blue_green_Dxy_5kb.tsv
+
+# Combine π, FST, and Dxy Datasets (Filter: Nsites >= 100)
+awk '
+BEGIN {
+  OFS="\t"
+}
+FILENAME=="bio244theta/blue_PH_pi_5kb.tsv" && NR>1 {
+  key=$1 FS $2 FS $3
+  piB[key]=$5
+  nB[key]=$6
+  center[key]=$4
+  chr[key]=$1
+  start[key]=$2
+  stop[key]=$3
+  next
+}
+FILENAME=="bio244theta/green_PH_pi_5kb.tsv" && NR>1 {
+  key=$1 FS $2 FS $3
+  piG[key]=$5
+  nG[key]=$6
+  next
+}
+FILENAME=="bio244fst/blue_green_FST_5kb.tsv" && NR>1 {
+  key=$1 FS $2 FS $3
+  fst[key]=$5
+  nF[key]=$6
+  next
+}
+FILENAME=="bio244dxy/blue_green_Dxy_5kb.tsv" && NR>1 {
+  key=$1 FS $2 FS $3
+  dxy[key]=$5
+  nD[key]=$6
+  next
+}
+END {
+  print "Chr","WinStart","WinStop","WinCenter",
+        "Pi_Blue","Pi_Green","FST","Dxy",
+        "Nsites_Blue","Nsites_Green","Nsites_FST","Nsites_Dxy"
+  for (key in piB) {
+    if (key in piG &&
+        key in fst &&
+        key in dxy &&
+        nB[key] >= 100 &&
+        nG[key] >= 100 &&
+        nF[key] >= 100 &&
+        nD[key] >= 100) {
+      print chr[key], start[key], stop[key], center[key],
+            piB[key], piG[key], fst[key], dxy[key],
+            nB[key], nG[key], nF[key], nD[key]
+    }
+  }
+}' \
+bio244theta/blue_PH_pi_5kb.tsv \
+bio244theta/green_PH_pi_5kb.tsv \
+bio244fst/blue_green_FST_5kb.tsv \
+bio244dxy/blue_green_Dxy_5kb.tsv | \
+awk 'NR==1 {print; next} {print | "sort -k1,1 -k2,2n"}' \
+> bio244dxy/blue_green_combined_5kb.tsv
