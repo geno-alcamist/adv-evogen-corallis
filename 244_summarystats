@@ -95,7 +95,7 @@ realSFS saf2theta bio244saf/green_PH.saf.idx \
   -outname bio244theta/green_PH
 
 # Calculate Windowed Nucleotide Diversity (π)
-# 6.1 Run thetaStat (5-kb non-overlapping windows)
+# Run thetaStat (5-kb non-overlapping windows)
 thetaStat do_stat bio244theta/blue_PH.thetas.idx \
   -win 5000 \
   -step 5000 \
@@ -106,7 +106,7 @@ thetaStat do_stat bio244theta/green_PH.thetas.idx \
   -step 5000 \
   -outnames bio244theta/green_PH
 
-# 6.2 Extract clean TSV tables
+# Extract clean TSV tables
 awk 'BEGIN{OFS="\t"} NR>1 {
   match($1, /\(([0-9]+),([0-9]+)\)$/, a)
   print $2, a[1], a[2], $3, $5, $14
@@ -122,13 +122,13 @@ wc -l bio244theta/blue_PH_pi_5kb.tsv
 wc -l bio244theta/green_PH_pi_5kb.tsv
 
 # Calculate Windowed FST
-# 7.1 Generate joint 2D SFS
+# Generate joint 2D SFS
 realSFS bio244saf/blue_PH.saf.idx bio244saf/green_PH.saf.idx \
   -fold 1 \
   -P 8 \
   > bio244fst/blue_green.2dsfs
 
-# 7.2 Calculate FST index
+# Calculate FST index
 realSFS fst index \
   bio244saf/blue_PH.saf.idx \
   bio244saf/green_PH.saf.idx \
@@ -136,20 +136,20 @@ realSFS fst index \
   -whichFst 1 \
   -fstout bio244fst/blue_green
 
-# 7.3 Calculate 5-kb windowed FST
+# Calculate 5-kb windowed FST
 realSFS fst stats2 bio244fst/blue_green.fst.idx \
   -win 5000 \
   -step 5000 \
   > bio244fst/blue_green_5kb.fst
 
-# 7.4 Extract clean FST table
+# Extract clean FST table
 awk 'BEGIN{OFS="\t"} NR>1 {
   match($1, /\(([0-9]+),([0-9]+)\)$/, a)
   print $2, a[1], a[2], $3, $5, $4
 }' bio244fst/blue_green_5kb.fst > bio244fst/blue_green_FST_5kb.tsv
 
 # Calculate Dxy
-# 8.1 Generate MAF files for Dxy
+# Generate MAF files for Dxy
 angsd \
   -bam bamlists/blue_PH.bamlist \
   -ref correctly_tagged_combined.fna \
@@ -182,17 +182,27 @@ angsd \
   -P 8 \
   -out bio244dxy/mafs/green_PH
 
-# 8.2 Decompress MAF files
+# Decompress MAF files
 gunzip -c bio244dxy/mafs/blue_PH.mafs.gz > bio244dxy/mafs/blue_PH.mafs
 gunzip -c bio244dxy/mafs/green_PH.mafs.gz > bio244dxy/mafs/green_PH.mafs
 
-# 8.3 Calculate per-site Dxy using calcDxy.R
-Rscript bio244dxy/scripts/calcDxy.R \
-  -p bio244dxy/mafs/blue_PH.mafs \
-  -q bio244dxy/mafs/green_PH.mafs \
-  > bio244dxy/Dxy_persite.txt
+# Download getDxy.pl if not present
+if [ ! -f bio244dxy/scripts/getDxy.pl ]; then
+  wget -O bio244dxy/scripts/getDxy.pl 'https://raw.githubusercontent.com/mfumagalli/ngsPopGen/master/scripts/getDxy.pl'
+fi
 
-# 8.4 Summarize per-site Dxy into 5-kb windows
+# Reformat MAF files (swap 'anc' and 'knownEM' columns for getDxy.pl)
+awk -F'\t' '{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$7"\t"$6"\t"$8}' bio244dxy/mafs/blue_PH.mafs > bio244dxy/mafs/blue_PH_clean.mafs
+awk -F'\t' '{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$7"\t"$6"\t"$8}' bio244dxy/mafs/green_PH.mafs > bio244dxy/mafs/green_PH_clean.mafs
+
+# Calculate per-site Dxy using getDxy.pl
+perl bio244dxy/scripts/getDxy.pl \
+  --pop1maf bio244dxy/mafs/blue_PH_clean.mafs \
+  --pop2maf bio244dxy/mafs/green_PH_clean.mafs \
+  --minInd 10 \
+  > bio244dxy/Dxy_persite.tsv
+
+# Summarize per-site Dxy into 5-kb windows
 awk 'BEGIN{OFS="\t"} NR>1 {
   win=int($2/5000)
   key=$1 OFS win
@@ -207,7 +217,7 @@ END {
     center=start+2500
     print a[1], start, stop, center, sum[key]/n[key], n[key]
   }
-}' bio244dxy/Dxy_persite.txt | LC_ALL=C sort -k1,1 -k2,2n > bio244dxy/blue_green_Dxy_5kb.tsv
+}' bio244dxy/Dxy_persite.tsv | LC_ALL=C sort -k1,1 -k2,2n > bio244dxy/blue_green_Dxy_5kb.tsv
 
 # Add header
 sed -i '1i Chr\tWinStart\tWinStop\tWinCenter\tDxy\tNsites' bio244dxy/blue_green_Dxy_5kb.tsv
