@@ -85,7 +85,7 @@ realSFS bio244saf/green_PH.saf.idx \
   -cores 8 \
   > bio244theta/green_PH.sfs
 
-# Convert SAF to Theta (For Pi)
+# Convert SAF to Theta (For π)
 realSFS saf2theta bio244saf/blue_PH.saf.idx \
   -sfs bio244theta/blue_PH.sfs \
   -outname bio244theta/blue_PH
