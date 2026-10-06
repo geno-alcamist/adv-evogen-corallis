@@ -117,9 +117,13 @@ awk 'BEGIN{OFS="\t"} NR>1 {
   print $2, a[1], a[2], $3, $5, $14
 }' bio244theta/green_PH.pestPG > bio244theta/green_PH_pi_5kb.tsv
 
+# Normalize π values per window by number of sites (Col 7 = Col 5 / Col 6)
+awk 'BEGIN{OFS="\t"} {$7 = ($6 > 0 ? $5/$6 : 0); print}' bio244theta/blue_PH_pi_5kb.tsv > bio244theta/blue_PH_pi_5kb_new.tsv
+awk 'BEGIN{OFS="\t"} {$7 = ($6 > 0 ? $5/$6 : 0); print}' bio244theta/green_PH_pi_5kb.tsv > bio244theta/green_PH_pi_5kb_new.tsv
+
 # Check window counts
-wc -l bio244theta/blue_PH_pi_5kb.tsv
-wc -l bio244theta/green_PH_pi_5kb.tsv
+wc -l bio244theta/blue_PH_pi_5kb_new.tsv
+wc -l bio244theta/green_PH_pi_5kb_new.tsv
 
 # Calculate Windowed FST
 # Generate joint 2D SFS
