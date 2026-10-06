@@ -278,8 +278,8 @@ END {
     }
   }
 }' \
-bio244theta/blue_PH_pi_5kb.tsv \
-bio244theta/green_PH_pi_5kb.tsv \
+bio244theta/blue_PH_pi_5kb_new.tsv \
+bio244theta/green_PH_pi_5kb_new.tsv \
 bio244fst/blue_green_FST_5kb.tsv \
 bio244dxy/blue_green_Dxy_5kb.tsv | \
 awk 'NR==1 {print; next} {print | "sort -k1,1 -k2,2n"}' \
