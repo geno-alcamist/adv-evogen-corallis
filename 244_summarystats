@@ -232,9 +232,9 @@ awk '
 BEGIN {
   OFS="\t"
 }
-FILENAME=="bio244theta/blue_PH_pi_5kb.tsv" && NR>1 {
+FILENAME=="bio244theta/blue_PH_pi_5kb_new.tsv" {
   key=$1 FS $2 FS $3
-  piB[key]=$5
+  piB[key]=$7   # Column 7 = Normalized Pi (Col 5 / Col 6)
   nB[key]=$6
   center[key]=$4
   chr[key]=$1
@@ -242,13 +242,13 @@ FILENAME=="bio244theta/blue_PH_pi_5kb.tsv" && NR>1 {
   stop[key]=$3
   next
 }
-FILENAME=="bio244theta/green_PH_pi_5kb.tsv" && NR>1 {
+FILENAME=="bio244theta/green_PH_pi_5kb_new.tsv" {
   key=$1 FS $2 FS $3
-  piG[key]=$5
+  piG[key]=$7   # Column 7 = Normalized Pi (Col 5 / Col 6)
   nG[key]=$6
   next
 }
-FILENAME=="bio244fst/blue_green_FST_5kb.tsv" && NR>1 {
+FILENAME=="bio244fst/blue_green_FST_5kb.tsv" {
   key=$1 FS $2 FS $3
   fst[key]=$5
   nF[key]=$6
